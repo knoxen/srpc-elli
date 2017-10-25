@@ -23,7 +23,7 @@ defmodule SrpcElli.Mixfile do
   defp deps do
     [
       {:elli,     git: "https://github.com/knoxen/elli.git", branch: "knoxen"},
-      {:srpc_srv, git: "git@github.com:knoxen/srpc-srv.git", tag: "0.14.0"},
+      {:srpc_srv, git: "git@github.com:knoxen/srpc-srv.git", tag: "0.15.0"},
       {:srpc_lib, git: "git@github.com:knoxen/srpc-lib.git", tag: "0.14.0"},
       {:entropy_string, "~> 1.0"},
       {:poison, "~> 3.1"},

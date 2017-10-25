@@ -31,7 +31,6 @@ defmodule SrpcElli.ElliHandler do
   ##
   defp preprocess_post(req, []) do
     srpc_handler = Application.get_env(:srpc_elli, :srpc_handler)
-    
     req
     |> Request.body
     |> Srpc.parse_packet(srpc_handler)
@@ -57,6 +56,7 @@ defmodule SrpcElli.ElliHandler do
   end
 
   defp preprocess_srpc({:app_request, client_info, data}, req) do
+    Logger.debug " proprocess app request"
     :erlang.put(:req_type, :app_request)
     :erlang.put(:client_info, client_info)
     case preprocess_app_req(client_info, data, req) do
