@@ -1,30 +1,24 @@
 defmodule SrpcElli.Application do
   @moduledoc false
 
-  @elli_port 4000
-  
   use Application
 
-  import Supervisor.Spec
+  def start(_type, _args) do
 
-  def start(_type, args) do
-    IO.puts "start args = #{inspect args}"
-    
-    elli_config =
-      [{:mods,
-        [{SrpcElli, []},
-         {Intf.ElliHandler, [] }
-        ]}
-      ]
+    port = required_config(:port)
+    required_config(:srpc_handler)
+    elli_handlers =  [{SrpcElli.ElliHandler, []}] ++ required_config(:elli_handlers)
+
+    elli_config = [{:mods, elli_handlers}]
 
     elli_opts =
       [{:callback, :elli_middleware},
        {:callback_args, elli_config},
-       {:port, @elli_port}
+       {:port, port}
       ]
 
     children = [
-      worker(:elli, [elli_opts])
+      Supervisor.Spec.worker(:elli, [elli_opts])
     ]
 
     opts = [name: SrpcElli.Supervisor,
@@ -33,4 +27,14 @@ defmodule SrpcElli.Application do
             
     Supervisor.start_link(children, opts)
   end
+
+  defp required_config(config) do
+    case Application.get_env(:srpc_elli, config) do
+      nil ->
+        raise ":srpc_elli requires config for #{config}"
+      value ->
+        value
+    end
+  end
+  
 end
