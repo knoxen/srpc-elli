@@ -1,7 +1,5 @@
 defmodule SrpcElli.ElliHandler do
-  @moduledoc """
-  CxTBD Documentation for SrpcElli.ElliHandler
-  """
+  @moduledoc false
 
   @behaviour :elli_handler
 
@@ -13,9 +11,13 @@ defmodule SrpcElli.ElliHandler do
 
   require Logger
 
+  @srpc_handler Application.get_env(:srpc_elli, :srpc_handler)
+
+  ##================================================================================================
   ##
   ## Preprocess
   ##
+  ##================================================================================================
   def preprocess(req, _args) do
     time_stamp(:srpc_start)
     case Request.method(req) do
@@ -26,14 +28,13 @@ defmodule SrpcElli.ElliHandler do
     end
   end
 
-  ##
+  ##------------------------------------------------------------------------------------------------
   ## Preprocess POST
-  ##
+  ##------------------------------------------------------------------------------------------------
   defp preprocess_post(req, []) do
-    srpc_handler = Application.get_env(:srpc_elli, :srpc_handler)
     req
     |> Request.body
-    |> Srpc.parse_packet(srpc_handler)
+    |> Srpc.parse_packet(@srpc_handler)
     |> preprocess_srpc(req)
   end
 
@@ -41,9 +42,9 @@ defmodule SrpcElli.ElliHandler do
     respond {:error, "Invalid request: Only SRPC POST to / accepted"}
   end
 
-  ##
+  ##------------------------------------------------------------------------------------------------
   ## Preprocess SRPC
-  ##
+  ##------------------------------------------------------------------------------------------------
   defp preprocess_srpc({:lib_exchange, _data}, req) do
     :erlang.put(:req_type, :lib_exchange)
     req
@@ -75,12 +76,11 @@ defmodule SrpcElli.ElliHandler do
     respond({:invalid, peer, reason})
   end
 
-  ##
-  ## Preprocess App Request
-  ##
+  ##------------------------------------------------------------------------------------------------
+  ## Preprocess App
+  ##------------------------------------------------------------------------------------------------
   defp preprocess_app_req(client_info, data, req) do
-    srpc_handler = Application.get_env(:srpc_elli, :srpc_handler)
-    case Srpc.decrypt(:origin_client, client_info, data, srpc_handler) do
+    case Srpc.decrypt(:origin_client, client_info, data, @srpc_handler) do
       {:ok, {nonce,
             << app_map_len  :: size(16),
                app_map_data :: binary - size(app_map_len),
@@ -98,6 +98,9 @@ defmodule SrpcElli.ElliHandler do
     end
   end
 
+  ##------------------------------------------------------------------------------------------------
+  ##  Build app request
+  ##------------------------------------------------------------------------------------------------
   defp build_app_req(app_map, app_body, req) do
     app_method = :erlang.binary_to_atom(app_map["method"], :utf8)
     app_path = split_path(app_map["path"])
@@ -106,8 +109,8 @@ defmodule SrpcElli.ElliHandler do
     headers = Request.headers(req)
     headers = :proplists.delete("Content-Type", headers)
     headers = :proplists.delete("Content-Length", headers)
-    content_length = :erlang.integer_to_binary(:erlang.size(app_body))
-    headers = :lists.append(headers, [{"Content-Length", content_length}])
+    headers = :lists.append(headers,
+      [{"Content-Length", app_body |> byte_size |> Integer.to_string}])
     
     app_headers = Enum.map(app_map["headers"], fn(e) -> e end) ++ headers
 
@@ -119,17 +122,20 @@ defmodule SrpcElli.ElliHandler do
     |> Elli.req(body: app_body)
   end
 
+  ##================================================================================================
   ##
   ## Handle
   ##
+  ##================================================================================================
   def handle({_code, _hdrs, _data} = resp, _args), do: resp
-
   def handle(req, _args), do: :erlang.get(:req_type) |> handle_req_type(req)
 
+  ##------------------------------------------------------------------------------------------------
+  ##  Handle lib exchange
+  ##------------------------------------------------------------------------------------------------
   defp handle_req_type(:lib_exchange, req) do
-    srpc_handler = Application.get_env(:srpc_elli, :srpc_handler)
     SrpcElli.ClientId.generate
-    |> Srpc.lib_exchange(Request.body(req), srpc_handler)
+    |> Srpc.lib_exchange(Request.body(req), @srpc_handler)
     |> case do
          {:ok, exchange_data} ->
            :erlang.put(:srpc_action, :lib_exchange)
@@ -141,9 +147,11 @@ defmodule SrpcElli.ElliHandler do
        end
   end
 
+  ##------------------------------------------------------------------------------------------------
+  ##  Handle SRPC action
+  ##------------------------------------------------------------------------------------------------
   defp handle_req_type(:srpc_action, req) do
-    srpc_handler = Application.get_env(:srpc_elli, :srpc_handler)
-    case Srpc.srpc_action(Request.body(req), srpc_handler) do
+    case Srpc.srpc_action(Request.body(req), @srpc_handler) do
       {_srpc_action, {:invalid, reason}} ->
         respond_invalid(req, reason)
       {srpc_action, result} ->
@@ -152,19 +160,20 @@ defmodule SrpcElli.ElliHandler do
     end
   end
 
+  ##------------------------------------------------------------------------------------------------
+  ##  Handle app
+  ##------------------------------------------------------------------------------------------------
   defp handle_req_type(:app_request, req) do
     :erlang.put(:app_info, {Request.method(req), Request.raw_path(req)})
     # The app handles the actual request
     :ignore
   end
 
-  defp handle_req_type(_, _req) do
-    :ignore
-  end
-
+  ##================================================================================================
   ##
   ## Postprocess
   ##
+  ##================================================================================================
   def postprocess(req, {code, data}, config), do: postprocess(req, {code, [], data}, config)
 
   def postprocess(req, {:ok, hdrs, data}, config), do: postprocess(req, {200, hdrs, data}, config)
@@ -186,6 +195,9 @@ defmodule SrpcElli.ElliHandler do
     end
   end
 
+  ##------------------------------------------------------------------------------------------------
+  ##  Postprocess app
+  ##------------------------------------------------------------------------------------------------
   def postprocess_app_request({code, headers, data}) do
     resp_headers = List.foldl(headers, %{}, fn({k,v}, map) -> Map.put(map, k, v) end)
 
@@ -200,16 +212,20 @@ defmodule SrpcElli.ElliHandler do
     respond(Srpc.encrypt(:origin_server, client_info, nonce, packet))
   end
 
+  ##================================================================================================
   ##
   ## Events
   ##
+  ##================================================================================================
   def handle_event(_event, _data, _args) do
     :ok
   end
 
+  ##================================================================================================
   ##
-  ## Respond
+  ##  Respond
   ##
+  ##================================================================================================
   defp respond({:ok, data}) do
     respond({:data, data})
   end
@@ -237,9 +253,11 @@ defmodule SrpcElli.ElliHandler do
     resp
   end
 
+  ##------------------------------------------------------------------------------------------------
   ##
   ## Respond to invalid SRPC request
   ##
+  ##------------------------------------------------------------------------------------------------
   defp respond_invalid(req, {:invalid, reason}) do
     respond_invalid(req, reason)
   end
@@ -248,9 +266,11 @@ defmodule SrpcElli.ElliHandler do
     respond({:invalid, Request.peer(req), reason})
   end
 
+  ##------------------------------------------------------------------------------------------------
   ##
   ## Response Headers
   ##
+  ##------------------------------------------------------------------------------------------------
   defp resp_headers(:data) do
     resp_headers("application/octet-stream")
   end
@@ -266,9 +286,11 @@ defmodule SrpcElli.ElliHandler do
     ]
   end
 
+  ##------------------------------------------------------------------------------------------------
   ##
   ##
   ##
+  ##------------------------------------------------------------------------------------------------
   defp time_stamp(marker) do
     :erlang.put({:time, marker}, :erlang.monotonic_time(:micro_seconds))
   end
