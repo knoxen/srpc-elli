@@ -4,13 +4,15 @@ defmodule SrpcElli.Application do
   use Application
 
   def start(_type, _args) do
-
-    port = required_config(:port)
+    # Ensure SRPC handler is avaliable for later use
     required_config(:srpc_handler)
+
+    # Prepend SRPC elli handler
     elli_handlers =  [{SrpcElli.ElliHandler, []}] ++ required_config(:elli_handlers)
 
     elli_config = [{:mods, elli_handlers}]
 
+    port = required_config(:port)
     elli_opts =
       [{:callback, :elli_middleware},
        {:callback_args, elli_config},

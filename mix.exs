@@ -22,12 +22,11 @@ defmodule SrpcElli.Mixfile do
   # Run "mix help deps" to learn about dependencies.
   defp deps do
     [
-      {:elli,     git: "https://github.com/knoxen/elli.git", branch: "knoxen"},
+      {:elli,     git: "git@github.com:knoxen/elli.git", branch: "knoxen"},
       {:srpc_srv, git: "git@github.com:knoxen/srpc-srv.git", tag: "0.15.0"},
       {:srpc_lib, git: "git@github.com:knoxen/srpc-lib.git", tag: "0.14.0"},
       {:entropy_string, "~> 1.0"},
-      {:poison, "~> 3.1"},
-#      {:logger_file_backend, "~> 0.0.10"},
+      {:poison, "~> 3.1"}
     ]
   end
 end
