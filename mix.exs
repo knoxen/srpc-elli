@@ -7,7 +7,8 @@ defmodule SrpcElli.Mixfile do
       version: "0.1.0",
       elixir: "~> 1.5",
       start_permanent: Mix.env == :prod,
-      deps: deps()
+      erlc_options: [:no_debug_info],
+      deps: deps(),
     ]
   end
 
@@ -22,9 +23,9 @@ defmodule SrpcElli.Mixfile do
   # Run "mix help deps" to learn about dependencies.
   defp deps do
     [
-      {:elli,     git: "git@github.com:knoxen/elli.git", branch: "knoxen"},
-      {:srpc_srv, git: "git@github.com:knoxen/srpc-srv.git", tag: "0.15.0"},
-      {:srpc_lib, git: "git@github.com:knoxen/srpc-lib.git", tag: "0.14.0"},
+      {:elli,     git: "https://github.com/knoxen/elli.git", branch: "knoxen"},
+      {:srpc_srv, path: "local/srpc_srv", compile: false},
+      {:srpc_lib, path: "local/srpc_lib", compile: false},
       {:entropy_string, "~> 1.0"},
       {:poison, "~> 3.1"}
     ]

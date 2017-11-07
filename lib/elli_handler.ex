@@ -57,7 +57,6 @@ defmodule SrpcElli.ElliHandler do
   end
 
   defp preprocess_srpc({:app_request, client_info, data}, req) do
-    Logger.debug " proprocess app request"
     :erlang.put(:req_type, :app_request)
     :erlang.put(:client_info, client_info)
     case preprocess_app_req(client_info, data, req) do
