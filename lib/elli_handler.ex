@@ -134,7 +134,7 @@ defmodule SrpcElli.ElliHandler do
   ##------------------------------------------------------------------------------------------------
   defp handle_req_type(:lib_exchange, req) do
     req
-    |> Request.body(@srpc_handler)
+    |> Request.body
     |> Srpc.lib_exchange(@srpc_handler)
     |> case do
          {:ok, exchange_data} ->
