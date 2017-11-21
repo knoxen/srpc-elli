@@ -123,7 +123,7 @@ defmodule SrpcElli.ElliHandler do
 
   ##================================================================================================
   ##
-  ## Handle
+  ##  Handle Request
   ##
   ##================================================================================================
   def handle({_code, _hdrs, _data} = resp, _args), do: resp
@@ -133,8 +133,9 @@ defmodule SrpcElli.ElliHandler do
   ##  Handle lib exchange
   ##------------------------------------------------------------------------------------------------
   defp handle_req_type(:lib_exchange, req) do
-    SrpcElli.ClientId.generate
-    |> Srpc.lib_exchange(Request.body(req), @srpc_handler)
+    req
+    |> Request.body(@srpc_handler)
+    |> Srpc.lib_exchange(@srpc_handler)
     |> case do
          {:ok, exchange_data} ->
            :erlang.put(:srpc_action, :lib_exchange)
