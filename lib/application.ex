@@ -38,5 +38,5 @@ defmodule SrpcElli.Application do
         value
     end
   end
-  
+
 end

@@ -151,13 +151,16 @@ defmodule SrpcElli.ElliHandler do
   ##  Handle SRPC action
   ##------------------------------------------------------------------------------------------------
   defp handle_req_type(:srpc_action, req) do
-    case Srpc.srpc_action(Request.body(req), @srpc_handler) do
-      {_srpc_action, {:invalid, reason}} ->
-        respond_invalid(req, reason)
-      {srpc_action, result} ->
-        :erlang.put(:srpc_action, srpc_action)
-        respond(result)
-    end
+    req
+    |> Request.body
+    |> Srpc.srpc_action(@srpc_handler)
+    |> case do
+         {_srpc_action, {:invalid, reason}} ->
+           respond_invalid(req, reason)
+         {srpc_action, result} ->
+           :erlang.put(:srpc_action, srpc_action)
+           respond(result)
+       end
   end
 
   ##------------------------------------------------------------------------------------------------
