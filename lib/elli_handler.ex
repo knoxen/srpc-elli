@@ -35,7 +35,7 @@ defmodule SrpcElli.ElliHandler do
     req
     |> Request.body
     |> Srpc.parse_packet(@srpc_handler)
-    |> preprocess_srpc(req)
+    |> preprocess_req(req)
   end
 
   defp preprocess_post(_req, _path) do
@@ -43,43 +43,30 @@ defmodule SrpcElli.ElliHandler do
   end
 
   ##------------------------------------------------------------------------------------------------
-  ## Preprocess SRPC
+  ## Preprocess lib exchange
   ##------------------------------------------------------------------------------------------------
-  defp preprocess_srpc({:lib_exchange, _data}, req) do
+  defp preprocess_req({:lib_exchange, _data}, req) do
     :erlang.put(:req_type, :lib_exchange)
     req
   end
 
-  defp preprocess_srpc({:srpc_action, client_info, _data}, req) do
+  ##------------------------------------------------------------------------------------------------
+  ## Preprocess srpc action
+  ##------------------------------------------------------------------------------------------------
+  defp preprocess_req({:srpc_action, client_info, _data}, req) do
     :erlang.put(:req_type, :srpc_action)
     :erlang.put(:client_info, client_info)
     req
   end
 
-  defp preprocess_srpc({:app_request, client_info, data}, req) do
+  ##------------------------------------------------------------------------------------------------
+  ## Preprocess app request
+  ##------------------------------------------------------------------------------------------------
+  defp preprocess_req({:app_request, client_info, data}, req) do
     :erlang.put(:req_type, :app_request)
     :erlang.put(:client_info, client_info)
-    case preprocess_app_req(client_info, data, req) do
-      {:ok, app_req} ->
-        app_req;
-      {:invalid, reason} ->
-        peer = Request.peer(req)
-        respond({:invalid, peer, reason})
-      error ->
-        respond(error)
-    end
-  end
 
-  defp preprocess_srpc({:invalid, reason}, req) do
-    peer = Request.peer(req)
-    respond({:invalid, peer, reason})
-  end
-
-  ##------------------------------------------------------------------------------------------------
-  ## Preprocess App
-  ##------------------------------------------------------------------------------------------------
-  defp preprocess_app_req(client_info, data, req) do
-    case Srpc.decrypt(:origin_client, client_info, data, @srpc_handler) do
+    case Srpc.unwrap(:origin_client, client_info, data, @srpc_handler) do
       {:ok, {nonce,
             << app_map_len  :: size(16),
                app_map_data :: binary - size(app_map_len),
@@ -89,28 +76,40 @@ defmodule SrpcElli.ElliHandler do
         if Map.has_key?(app_map, "proxy") do
           :erlang.put(:srpc_proxy, app_map["proxy"])
         end
-        {:ok, build_app_req(app_map, app_body, req)}
+        build_app_req(app_map, app_body, req)
       {:ok, _data} ->
-        {:error, "Invalid data in request packet"}
-      result ->
-        result
+        respond {:error, "Invalid data in request packet"}
+      {:invalid, reason} ->
+        respond_invalid(req, reason)
+      error ->
+        respond error
     end
   end
 
   ##------------------------------------------------------------------------------------------------
-  ##  Build app request
+  ## Preprocess of invalid request
+  ##------------------------------------------------------------------------------------------------
+  defp preprocess_req({:invalid, reason}, req), do: respond_invalid(req, reason)
+
+  ##------------------------------------------------------------------------------------------------
+  ## Preprocess of error request
+  ##------------------------------------------------------------------------------------------------
+  defp preprocess_req({:error, _reason} = error, _req), do: respond(error)
+
+  ##------------------------------------------------------------------------------------------------
+  ##  Build app request from app map
   ##------------------------------------------------------------------------------------------------
   defp build_app_req(app_map, app_body, req) do
     app_method = :erlang.binary_to_atom(app_map["method"], :utf8)
     app_path = split_path(app_map["path"])
     app_qs = split_query_string(app_map["query"])
-    
+
     headers = Request.headers(req)
     headers = :proplists.delete("Content-Type", headers)
     headers = :proplists.delete("Content-Length", headers)
     headers = :lists.append(headers,
       [{"Content-Length", app_body |> byte_size |> Integer.to_string}])
-    
+
     app_headers = Enum.map(app_map["headers"], fn(e) -> e end) ++ headers
 
     req
@@ -143,12 +142,12 @@ defmodule SrpcElli.ElliHandler do
          {:invalid, reason} ->
            respond_invalid(req, reason)
          {:error, _} = error ->
-           error
+           respond error
        end
   end
 
   ##------------------------------------------------------------------------------------------------
-  ##  Handle SRPC action
+  ##  Handle srpc action
   ##------------------------------------------------------------------------------------------------
   defp handle_req_type(:srpc_action, req) do
     req
@@ -164,10 +163,11 @@ defmodule SrpcElli.ElliHandler do
   end
 
   ##------------------------------------------------------------------------------------------------
-  ##  Handle app
+  ##  Handle app request
   ##------------------------------------------------------------------------------------------------
   defp handle_req_type(:app_request, req) do
     :erlang.put(:app_info, {Request.method(req), Request.raw_path(req)})
+    time_stamp(:app_start)
     # The app handles the actual request
     :ignore
   end
@@ -179,45 +179,47 @@ defmodule SrpcElli.ElliHandler do
   ##================================================================================================
   def postprocess(req, {code, data}, config), do: postprocess(req, {code, [], data}, config)
 
-  def postprocess(req, {:ok, hdrs, data}, config), do: postprocess(req, {200, hdrs, data}, config)
+  def postprocess(req, {:ok, hdrs, data}, []), do: postprocess(req, {200, hdrs, data}, [])
 
-  def postprocess(req, {code, _hdrs, data} = resp, _config) do
+  def postprocess(_req, {code, hdrs, data} = resp, []) do
     case :erlang.get(:req_type) do
       :app_request ->
-        app_end(req, code, data)
-
-        case :erlang.get(:srpc_proxy) do
-          :undefined -> code
-          _ -> 200
-        end
-        |> case do
-             200 -> postprocess_app_request(resp)
-             _ -> respond(resp)
-           end
-      _ -> respond(resp)
+        app_resp_code =
+          case :erlang.get(:srpc_proxy) do
+            :undefined -> code
+            _ -> 200
+          end
+        len = :erlang.byte_size(data)
+        postprocess_app_request({app_resp_code, hdrs, data}, len)
+      _ ->
+        respond(resp)
     end
   end
 
   ##------------------------------------------------------------------------------------------------
-  ##  Postprocess app
+  ##  Postprocess app request
   ##------------------------------------------------------------------------------------------------
-  def postprocess_app_request({code, headers, data}) do
+  def postprocess_app_request({200 = code, headers, data}, len) do
     resp_headers = List.foldl(headers, %{}, fn({k,v}, map) -> Map.put(map, k, v) end)
-
     info_data =
       %{"respCode" => code, "headers" => resp_headers}
       |> Poison.encode!
-
     info_len = :erlang.byte_size(info_data)
     nonce = :erlang.get(:nonce)
     packet = << info_len :: size(16), info_data :: binary, data :: binary >>
-    client_info = :erlang.get(:client_info)
-    respond(Srpc.encrypt(:origin_server, client_info, nonce, packet))
+
+    app_end(code, len)
+    respond(Srpc.wrap(:origin_server, :erlang.get(:client_info), nonce, packet))
+  end
+
+  def postprocess_app_request({code, _headers, _data} = resp, len) do
+    app_end(code, len)
+    respond(resp)
   end
 
   ##================================================================================================
   ##
-  ## Events
+  ##  Events
   ##
   ##================================================================================================
   def handle_event(_event, _data, _args) do
@@ -239,40 +241,30 @@ defmodule SrpcElli.ElliHandler do
   end
 
   defp respond({:error, reason}) do
+    Logger.warn "Bad Request: #{inspect reason}"
     time_stamp(:srpc_end)
-    Logger.warn "Bad Request: #{reason}"
     {400, resp_headers(:text), "Bad Request"}
   end
 
-  defp respond({:invalid, peer, reason}) do
+  defp respond({_code, _hdrs, _data} = resp) do
     time_stamp(:srpc_end)
-    :erlang.put(:app_info, :undefined)
-    :erlang.put(:srpc_action, :invalid)
-    Logger.warn "#{peer} #{reason}"
-    {403, resp_headers(:text), "Forbidden"}
-  end
-
-  defp respond(resp) do
     resp
   end
 
   ##------------------------------------------------------------------------------------------------
-  ##
-  ## Respond to invalid SRPC request
-  ##
+  ##  Respond to invalid request (for SRPC reasons)
   ##------------------------------------------------------------------------------------------------
-  defp respond_invalid(req, {:invalid, reason}) do
-    respond_invalid(req, reason)
-  end
-
   defp respond_invalid(req, reason) do
-    respond({:invalid, Request.peer(req), reason})
+    peer = Request.peer(req)
+    :erlang.put(:app_info, :undefined)
+    :erlang.put(:srpc_action, :invalid)
+    Logger.warn "Invalid Request: #{inspect peer} #{inspect reason}"
+    time_stamp(:srpc_end)
+    {403, resp_headers(:text), "Forbidden"}
   end
 
   ##------------------------------------------------------------------------------------------------
-  ##
-  ## Response Headers
-  ##
+  ##  Response Headers
   ##------------------------------------------------------------------------------------------------
   defp resp_headers(:data) do
     resp_headers("application/octet-stream")
@@ -291,25 +283,34 @@ defmodule SrpcElli.ElliHandler do
 
   ##------------------------------------------------------------------------------------------------
   ##
-  ##
-  ##
   ##------------------------------------------------------------------------------------------------
   defp time_stamp(marker) do
     :erlang.put({:time, marker}, :erlang.monotonic_time(:micro_seconds))
   end
 
-  defp app_end(req, code, data) do
-    time_stamp(:app_end)
-    method = Request.method(req)
-    path = Request.raw_path(req)
-    length = :erlang.byte_size(data)
-    :erlang.put(:app_info, {method, path, code, length})
+  ##------------------------------------------------------------------------------------------------
+  ##
+  ##------------------------------------------------------------------------------------------------
+  defp app_end(code, len) do
+    case :erlang.get(:app_info) do
+      {method, path} ->
+        :erlang.put(:app_info, {method, path, code, len})
+        time_stamp(:app_end)
+      :undefined ->
+        :ok
+    end
   end
 
+  ##------------------------------------------------------------------------------------------------
+  ##
+  ##------------------------------------------------------------------------------------------------
   defp split_path(path) do
     for segment <- :binary.split(path, "/", [:global]), segment != "", do: segment
   end
 
+  ##------------------------------------------------------------------------------------------------
+  ##
+  ##------------------------------------------------------------------------------------------------
   defp split_query_string(qs) do
     qs
     |> :binary.split("&", [:global, :trim])
@@ -320,7 +321,7 @@ defmodule SrpcElli.ElliHandler do
   defp split_terms(terms), do: for term <- terms, do: :binary.split(term, "=")
 
   defp kv_terms(kvs), do: for kv <- kvs, do: term_kv(kv)
-  
+
   defp term_kv([key, value]), do: {key, value}
   defp term_kv([key]), do: {key, :true}
 
