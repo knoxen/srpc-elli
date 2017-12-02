@@ -206,7 +206,11 @@ defmodule SrpcElli.ElliHandler do
       %{"respCode" => code, "headers" => resp_headers}
       |> Poison.encode!
     info_len = :erlang.byte_size(info_data)
-    nonce = :erlang.get(:nonce)
+    nonce =
+      case :erlang.get(:nonce) do
+        :undefined -> ""
+        value -> value
+      end
     packet = << info_len :: size(16), info_data :: binary, data :: binary >>
 
     respond(Srpc.wrap(:erlang.get(:client_info), nonce, packet))
