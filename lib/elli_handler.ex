@@ -66,7 +66,7 @@ defmodule SrpcElli.ElliHandler do
     :erlang.put(:req_type, :app_request)
     :erlang.put(:client_info, client_info)
 
-    case Srpc.unwrap(:origin_client, client_info, data, @srpc_handler) do
+    case Srpc.unwrap(client_info, data, @srpc_handler) do
       {:ok, {nonce,
             << app_map_len  :: size(16),
                app_map_data :: binary - size(app_map_len),
@@ -209,12 +209,12 @@ defmodule SrpcElli.ElliHandler do
     packet = << info_len :: size(16), info_data :: binary, data :: binary >>
 
     app_end(code, len)
-    respond(Srpc.wrap(:origin_server, :erlang.get(:client_info), nonce, packet))
   end
 
   def postprocess_app_request({code, _headers, _data} = resp, len) do
     app_end(code, len)
     respond(resp)
+    respond(Srpc.wrap(:erlang.get(:client_info), nonce, packet))
   end
 
   ##================================================================================================
