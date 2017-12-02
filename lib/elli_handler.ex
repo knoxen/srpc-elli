@@ -190,7 +190,8 @@ defmodule SrpcElli.ElliHandler do
             _ -> 200
           end
         len = :erlang.byte_size(data)
-        postprocess_app_request({app_resp_code, hdrs, data}, len)
+        app_end(code, len)
+        postprocess_app_request({app_resp_code, hdrs, data})
       _ ->
         respond(resp)
     end
@@ -199,7 +200,7 @@ defmodule SrpcElli.ElliHandler do
   ##------------------------------------------------------------------------------------------------
   ##  Postprocess app request
   ##------------------------------------------------------------------------------------------------
-  def postprocess_app_request({200 = code, headers, data}, len) do
+  def postprocess_app_request({code, headers, data}) do
     resp_headers = List.foldl(headers, %{}, fn({k,v}, map) -> Map.put(map, k, v) end)
     info_data =
       %{"respCode" => code, "headers" => resp_headers}
@@ -208,12 +209,6 @@ defmodule SrpcElli.ElliHandler do
     nonce = :erlang.get(:nonce)
     packet = << info_len :: size(16), info_data :: binary, data :: binary >>
 
-    app_end(code, len)
-  end
-
-  def postprocess_app_request({code, _headers, _data} = resp, len) do
-    app_end(code, len)
-    respond(resp)
     respond(Srpc.wrap(:erlang.get(:client_info), nonce, packet))
   end
 
