@@ -15,20 +15,19 @@ defmodule SrpcElli.Mixfile do
   # Run "mix help compile.app" to learn about applications.
   def application do
     [
-      extra_applications: [:sasl, :logger],
-      mod: {SrpcElli.Application, []}
+      extra_applications: [:logger],
+      mod: {SrpcElli, []}
     ]
   end
 
   # Run "mix help deps" to learn about dependencies.
   defp deps do
     [
-      {:elli,     git: "https://github.com/knoxen/elli.git", branch: "knoxen"},
-      {:srpc_srv, path: "../../../erlang/srpc_srv"},
-      {:srpc_lib, path: "../../../erlang/srpc_lib"},
-      # {:srpc_srv, path: "local/srpc_srv", compile: false},
-      # {:srpc_lib, path: "local/srpc_lib", compile: false},
-      {:entropy_string, "~> 1.0"},
+      {:elli, git: "https://github.com/knoxen/elli.git", branch: "knoxen"},
+      # {:srpc_srv, path: "../../../erlang/srpc_srv"},
+      # {:srpc_lib, path: "../../../erlang/srpc_lib"},
+      {:srpc_srv, path: "local/srpc_srv", compile: false},
+      {:srpc_lib, path: "local/srpc_lib", compile: false},
       {:poison, "~> 3.1"}
     ]
   end

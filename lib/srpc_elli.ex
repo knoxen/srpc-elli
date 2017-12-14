@@ -1,4 +1,4 @@
-defmodule SrpcElli.Application do
+defmodule SrpcElli do
   @moduledoc false
 
   use Application
@@ -8,24 +8,30 @@ defmodule SrpcElli.Application do
     required_config(:srpc_handler)
 
     # Prepend SRPC elli handler
-    elli_handlers =  [{SrpcElli.ElliHandler, []}] ++ required_config(:elli_handlers)
-
-    elli_config = [{:mods, elli_handlers}]
+    elli_handlers =  [
+      {SrpcElli.ElliHandler, []}
+    ] ++ required_config(:elli_handlers)
+    
+    elli_config = [
+      {:mods, elli_handlers}
+    ]
 
     port = required_config(:port)
-    elli_opts =
-      [{:callback, :elli_middleware},
-       {:callback_args, elli_config},
-       {:port, port}
-      ]
+    elli_opts = [
+      {:callback, :elli_middleware},
+      {:callback_args, elli_config},
+      {:port, port},
+      {:name, {:local, :elli}}
+    ]
 
     children = [
       Supervisor.Spec.worker(:elli, [elli_opts])
     ]
 
-    opts = [name: SrpcElli.Supervisor,
-            strategy: :one_for_one,
-            ]
+    opts = [
+      name: SrpcElli.Supervisor,
+      strategy: :one_for_one,
+    ]
             
     Supervisor.start_link(children, opts)
   end

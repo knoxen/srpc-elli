@@ -9,8 +9,6 @@ defmodule SrpcElli.ElliHandler do
   alias :srpc_srv, as: Srpc
   alias :elli_request, as: Request
 
-  require Logger
-
   @srpc_handler Application.get_env(:srpc_elli, :srpc_handler)
 
   ##================================================================================================
@@ -18,34 +16,50 @@ defmodule SrpcElli.ElliHandler do
   ## Preprocess
   ##
   ##================================================================================================
+  ##------------------------------------------------------------------------------------------------
+  ##  Preprocess Request
+  ##------------------------------------------------------------------------------------------------
   def preprocess(req, _args) do
     time_stamp(:srpc_start)
     case Request.method(req) do
       :POST ->
         preprocess_post(req, Request.path(req))
       _ ->
-        respond {:error, "Invalid request: Only SRPC POST accepted"}
+        respond {:error, "Invalid path: Only SRPC POST accepted"}
     end
   end
 
-  ##------------------------------------------------------------------------------------------------
+  ##================================================================================================
+  ##
   ## Preprocess POST
+  ##
+  ##================================================================================================
+  ##------------------------------------------------------------------------------------------------
+  ##  Preprocess POST to /
   ##------------------------------------------------------------------------------------------------
   defp preprocess_post(req, []) do
     req
     |> Request.body
     |> Srpc.parse_packet(@srpc_handler)
-    |> preprocess_req(req)
+    |> preprocess_srpc(req)
   end
 
+  ##------------------------------------------------------------------------------------------------
+  ##  Punt any path other than /
+  ##------------------------------------------------------------------------------------------------
   defp preprocess_post(_req, _path) do
     respond {:error, "Invalid request: Only SRPC POST to / accepted"}
   end
 
+  ##================================================================================================
+  ##
+  ## Preprocess SRPC packet
+  ##
+  ##================================================================================================
   ##------------------------------------------------------------------------------------------------
   ## Preprocess lib exchange
   ##------------------------------------------------------------------------------------------------
-  defp preprocess_req({:lib_exchange, _data}, req) do
+  defp preprocess_srpc({:lib_exchange, _data}, req) do
     :erlang.put(:req_type, :lib_exchange)
     req
   end
@@ -53,7 +67,7 @@ defmodule SrpcElli.ElliHandler do
   ##------------------------------------------------------------------------------------------------
   ## Preprocess srpc action
   ##------------------------------------------------------------------------------------------------
-  defp preprocess_req({:srpc_action, client_info, _data}, req) do
+  defp preprocess_srpc({:srpc_action, client_info, _data}, req) do
     :erlang.put(:req_type, :srpc_action)
     :erlang.put(:client_info, client_info)
     req
@@ -62,7 +76,7 @@ defmodule SrpcElli.ElliHandler do
   ##------------------------------------------------------------------------------------------------
   ## Preprocess app request
   ##------------------------------------------------------------------------------------------------
-  defp preprocess_req({:app_request, client_info, data}, req) do
+  defp preprocess_srpc({:app_request, client_info, data}, req) do
     :erlang.put(:req_type, :app_request)
     :erlang.put(:client_info, client_info)
 
@@ -79,22 +93,15 @@ defmodule SrpcElli.ElliHandler do
         build_app_req(app_map, app_body, req)
       {:ok, _data} ->
         respond {:error, "Invalid data in request packet"}
-      {:invalid, reason} ->
-        respond_invalid(req, reason)
-      error ->
-        respond error
+      other ->
+        respond other
     end
   end
 
   ##------------------------------------------------------------------------------------------------
-  ## Preprocess of invalid request
+  ## Preprocess invalid and error request
   ##------------------------------------------------------------------------------------------------
-  defp preprocess_req({:invalid, reason}, req), do: respond_invalid(req, reason)
-
-  ##------------------------------------------------------------------------------------------------
-  ## Preprocess of error request
-  ##------------------------------------------------------------------------------------------------
-  defp preprocess_req({:error, _reason} = error, _req), do: respond(error)
+  defp preprocess_srpc(other, _req), do: respond(other)
 
   ##------------------------------------------------------------------------------------------------
   ##  Build app request from app map
@@ -126,12 +133,12 @@ defmodule SrpcElli.ElliHandler do
   ##
   ##================================================================================================
   def handle({_code, _hdrs, _data} = resp, _args), do: resp
-  def handle(req, _args), do: :erlang.get(:req_type) |> handle_req_type(req)
+  def handle(req, _args), do: :erlang.get(:req_type) |> handle_req(req)
 
   ##------------------------------------------------------------------------------------------------
   ##  Handle lib exchange
   ##------------------------------------------------------------------------------------------------
-  defp handle_req_type(:lib_exchange, req) do
+  defp handle_req(:lib_exchange, req) do
     req
     |> Request.body
     |> Srpc.lib_exchange(@srpc_handler)
@@ -139,33 +146,31 @@ defmodule SrpcElli.ElliHandler do
          {:ok, exchange_data} ->
            :erlang.put(:srpc_action, :lib_exchange)
            respond({:data, exchange_data})
-         {:invalid, reason} ->
-           respond_invalid(req, reason)
-         {:error, _} = error ->
-           respond error
+         other ->
+           respond other
        end
   end
 
   ##------------------------------------------------------------------------------------------------
   ##  Handle srpc action
   ##------------------------------------------------------------------------------------------------
-  defp handle_req_type(:srpc_action, req) do
+  defp handle_req(:srpc_action, req) do
     req
     |> Request.body
     |> Srpc.srpc_action(@srpc_handler)
     |> case do
-         {_srpc_action, {:invalid, reason}} ->
-           respond_invalid(req, reason)
+         {_srpc_action, {:invalid, _} = invalid} ->
+           respond invalid
          {srpc_action, result} ->
            :erlang.put(:srpc_action, srpc_action)
-           respond(result)
+           respond result
        end
   end
 
   ##------------------------------------------------------------------------------------------------
   ##  Handle app request
   ##------------------------------------------------------------------------------------------------
-  defp handle_req_type(:app_request, req) do
+  defp handle_req(:app_request, req) do
     :erlang.put(:app_info, {Request.method(req), Request.raw_path(req)})
     time_stamp(:app_start)
     # The app handles the actual request
@@ -240,26 +245,22 @@ defmodule SrpcElli.ElliHandler do
   end
 
   defp respond({:error, reason}) do
-    Logger.warn "Bad Request: #{inspect reason}"
+    :erlang.put(:error, "Bad Request: #{inspect reason}")
     time_stamp(:srpc_end)
     {400, resp_headers(:text), "Bad Request"}
+  end
+
+  defp respond({:invalid, reason}) do
+    :erlang.put(:invalid, "Invalid Request: #{inspect reason}")
+    :erlang.put(:app_info, :undefined)
+    :erlang.put(:srpc_action, :invalid)
+    time_stamp(:srpc_end)
+    {403, resp_headers(:text), "Forbidden"}
   end
 
   defp respond({_code, _hdrs, _data} = resp) do
     time_stamp(:srpc_end)
     resp
-  end
-
-  ##------------------------------------------------------------------------------------------------
-  ##  Respond to invalid request (for SRPC reasons)
-  ##------------------------------------------------------------------------------------------------
-  defp respond_invalid(req, reason) do
-    peer = Request.peer(req)
-    :erlang.put(:app_info, :undefined)
-    :erlang.put(:srpc_action, :invalid)
-    Logger.warn "Invalid Request: #{inspect peer} #{inspect reason}"
-    time_stamp(:srpc_end)
-    {403, resp_headers(:text), "Forbidden"}
   end
 
   ##------------------------------------------------------------------------------------------------
