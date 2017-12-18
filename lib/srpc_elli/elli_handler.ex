@@ -9,8 +9,6 @@ defmodule SrpcElli.ElliHandler do
   alias :srpc_srv, as: Srpc
   alias :elli_request, as: Request
 
-  @srpc_handler Application.get_env(:srpc_elli, :srpc_handler)
-
   ##================================================================================================
   ##
   ## Preprocess
@@ -40,7 +38,7 @@ defmodule SrpcElli.ElliHandler do
   defp preprocess_post(req, []) do
     req
     |> Request.body
-    |> Srpc.parse_packet(@srpc_handler)
+    |> Srpc.parse_packet(srpc_handler())
     |> preprocess_srpc(req)
   end
 
@@ -80,7 +78,7 @@ defmodule SrpcElli.ElliHandler do
     :erlang.put(:req_type, :app_request)
     :erlang.put(:client_info, client_info)
 
-    case Srpc.unwrap(client_info, data, @srpc_handler) do
+    case Srpc.unwrap(client_info, data, srpc_handler()) do
       {:ok, {nonce,
             << app_map_len  :: size(16),
                app_map_data :: binary - size(app_map_len),
@@ -141,7 +139,7 @@ defmodule SrpcElli.ElliHandler do
   defp handle_req(:lib_exchange, req) do
     req
     |> Request.body
-    |> Srpc.lib_exchange(@srpc_handler)
+    |> Srpc.lib_exchange(srpc_handler())
     |> case do
          {:ok, exchange_data} ->
            :erlang.put(:srpc_action, :lib_exchange)
@@ -157,7 +155,7 @@ defmodule SrpcElli.ElliHandler do
   defp handle_req(:srpc_action, req) do
     req
     |> Request.body
-    |> Srpc.srpc_action(@srpc_handler)
+    |> Srpc.srpc_action(srpc_handler())
     |> case do
          {_srpc_action, {:invalid, _} = invalid} ->
            respond invalid
@@ -325,4 +323,9 @@ defmodule SrpcElli.ElliHandler do
   defp term_kv([key, value]), do: {key, value}
   defp term_kv([key]), do: {key, :true}
 
+  ##------------------------------------------------------------------------------------------------
+  ##
+  ##------------------------------------------------------------------------------------------------
+  defp srpc_handler, do: Application.get_env(:srpc_elli, :srpc_handler)
+  
 end
