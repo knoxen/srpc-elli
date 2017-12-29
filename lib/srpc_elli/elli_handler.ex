@@ -143,9 +143,15 @@ defmodule SrpcElli.ElliHandler do
   ##  Handle lib exchange
   ##------------------------------------------------------------------------------------------------
   defp handle_req(:lib_exchange, req) do
-    req
-    |> Request.body
-    |> Srpc.lib_exchange(srpc_handler())
+    srpc_handler = srpc_handler()
+
+    {:lib_exchange, exchange_data} =
+      req
+      |> Request.body
+      |> Srpc.parse_packet(srpc_handler)
+    
+    exchange_data
+    |> Srpc.lib_exchange(srpc_handler)
     |> case do
          {:ok, exchange_data} ->
            :erlang.put(:srpc_action, :lib_exchange)
