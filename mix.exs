@@ -16,11 +16,11 @@ defmodule SrpcElli.Mixfile do
 
   defp deps do
     [
-      {:elli, git: "https://github.com/knoxen/elli.git", branch: "knoxen"},
       # {:srpc_srv, path: "../../../erlang/srpc_srv"},
       # {:srpc_lib, path: "../../../erlang/srpc_lib"},
       {:srpc_srv, path: "local/srpc_srv", compile: false},
       {:srpc_lib, path: "local/srpc_lib", compile: false},
+      {:elli, git: "https://github.com/knoxen/elli.git", branch: "knoxen"},
       {:poison, "~> 3.1"}
     ]
   end

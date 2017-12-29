@@ -79,16 +79,22 @@ defmodule SrpcElli.ElliHandler do
     :erlang.put(:client_info, client_info)
 
     case Srpc.unwrap(client_info, data, srpc_handler()) do
-      {:ok, {nonce,
-            << app_map_len  :: size(16),
-               app_map_data :: binary - size(app_map_len),
-               app_body     :: binary >>}} ->
+      {:ok, {nonce, << app_map_len  :: size(16),
+                       app_map_data :: binary - size(app_map_len),
+                       app_body     :: binary >>}} ->
         :erlang.put(:nonce, nonce)
-        app_map = Poison.decode!(app_map_data)
-        if Map.has_key?(app_map, "proxy") do
-          :erlang.put(:srpc_proxy, app_map["proxy"])
-        end
-        build_app_req(app_map, app_body, req)
+
+        app_map_data
+        |> Poison.decode
+        |> case do
+             {:ok, app_map} ->
+               if Map.has_key?(app_map, "proxy") do
+                 :erlang.put(:srpc_proxy, app_map["proxy"])
+               end
+               build_app_req(app_map, app_body, req)
+             :error ->
+               respond {:error, "Invalid app map in request packet"}
+           end
       {:ok, _data} ->
         respond {:error, "Invalid data in request packet"}
       other ->
@@ -205,18 +211,20 @@ defmodule SrpcElli.ElliHandler do
   ##------------------------------------------------------------------------------------------------
   def postprocess_app_request({code, headers, data}) do
     resp_headers = List.foldl(headers, %{}, fn({k,v}, map) -> Map.put(map, k, v) end)
-    info_data =
-      %{"respCode" => code, "headers" => resp_headers}
-      |> Poison.encode!
+
+    nonce = case :erlang.get(:nonce) do
+              :undefined -> ""
+              value -> value
+            end
+
+    info_data = %{"respCode" => code, "headers" => resp_headers}
+    |> Poison.encode!
     info_len = :erlang.byte_size(info_data)
-    nonce =
-      case :erlang.get(:nonce) do
-        :undefined -> ""
-        value -> value
-      end
     packet = << info_len :: size(16), info_data :: binary, data :: binary >>
 
-    respond(Srpc.wrap(:erlang.get(:client_info), nonce, packet))
+    client_info = :erlang.get(:client_info)
+
+    respond Srpc.wrap(client_info, nonce, packet)
   end
 
   ##================================================================================================
@@ -243,13 +251,13 @@ defmodule SrpcElli.ElliHandler do
   end
 
   defp respond({:error, reason}) do
-    :erlang.put(:error, "Bad Request: #{inspect reason}")
+    :erlang.put(:reason, "Bad Request: #{inspect reason}")
     time_stamp(:srpc_end)
     {400, resp_headers(:text), "Bad Request"}
   end
 
   defp respond({:invalid, reason}) do
-    :erlang.put(:invalid, "Invalid Request: #{inspect reason}")
+    :erlang.put(:reason, "Invalid Request: #{inspect reason}")
     :erlang.put(:app_info, :undefined)
     :erlang.put(:srpc_action, :invalid)
     time_stamp(:srpc_end)
