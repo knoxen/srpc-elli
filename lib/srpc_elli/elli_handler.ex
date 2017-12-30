@@ -145,19 +145,19 @@ defmodule SrpcElli.ElliHandler do
   defp handle_req(:lib_exchange, req) do
     srpc_handler = srpc_handler()
 
-    {:lib_exchange, exchange_data} =
+    {:lib_exchange, req_data} =
       req
       |> Request.body
       |> Srpc.parse_packet(srpc_handler)
     
-    exchange_data
+    req_data
     |> Srpc.lib_exchange(srpc_handler)
     |> case do
-         {:ok, exchange_data} ->
+         {:ok, resp_data} ->
            :erlang.put(:srpc_action, :lib_exchange)
-           respond({:data, exchange_data})
-         other ->
-           respond other
+           respond({:data, resp_data})
+         not_ok ->
+           respond not_ok
        end
   end
 
@@ -167,12 +167,12 @@ defmodule SrpcElli.ElliHandler do
   defp handle_req(:srpc_action, req) do
     srpc_handler = srpc_handler()
 
-    {:srpc_action, client_info, exchange_data} =
+    {:srpc_action, client_info, req_data} =
       req
       |> Request.body
       |> Srpc.parse_packet(srpc_handler)
     
-    case Srpc.srpc_action(client_info, exchange_data, srpc_handler) do
+    case Srpc.srpc_action(client_info, req_data, srpc_handler) do
       {_srpc_action, {:invalid, _} = invalid} ->
         respond invalid
       {srpc_action, result} ->
