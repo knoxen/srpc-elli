@@ -1,6 +1,6 @@
 {application,srpc_srv,
              [{description,"Knoxen SRPC Server"},
-              {vsn,"0.16.0"},
+              {vsn,"0.16.1"},
               {registered,[]},
               {applications,[kernel,stdlib]},
               {env,[]},
