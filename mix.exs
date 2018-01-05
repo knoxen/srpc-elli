@@ -39,8 +39,6 @@ defmodule SrpcElli.Mixfile do
     [
      {:srpc_srv, path: "local/srpc_srv", compile: false},
      {:srpc_lib, path: "local/srpc_lib", compile: false},
-     # {:srpc_srv, git: "git@github.com:knoxen/srpc-srv.git", tag: "0.16.1"},
-     # {:srpc_lib, git: "git@github.com:knoxen/srpc-lib.git", tag: "0.15.1"},
     ]
   end
   

@@ -112,8 +112,9 @@ defmodule SrpcElli.ElliHandler do
   ##------------------------------------------------------------------------------------------------
   defp build_app_req(app_map, app_body, req) do
     app_method = :erlang.binary_to_atom(app_map["method"], :utf8)
-    app_path = split_path(app_map["path"])
-    app_qs = split_query_string(app_map["query"])
+    app_raw_path = app_map["path"]
+    app_path = split_path(app_raw_path)
+    app_args = split_query_string(app_map["query"])
 
     headers = Request.headers(req)
     headers = :proplists.delete("Content-Type", headers)
@@ -125,8 +126,9 @@ defmodule SrpcElli.ElliHandler do
     
     req
     |> Elli.req(method: app_method)
+    |> Elli.req(raw_path: app_raw_path)
     |> Elli.req(path: app_path)
-    |> Elli.req(args: app_qs)
+    |> Elli.req(args: app_args)
     |> Elli.req(headers: app_headers)
     |> Elli.req(body: app_body)
   end
