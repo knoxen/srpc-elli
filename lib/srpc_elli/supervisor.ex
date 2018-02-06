@@ -33,8 +33,8 @@ defmodule SrpcElli.Supervisor do
   def init(_args), do: throw(:invalid_args)
 
   defp validate_elli_handler(mod) do
-    exports = mod.__info__(:exports)
-    unless exports |> Enum.member?({:handle, 2}) and exports |> Enum.member?({:handle_event, 3}) do
+    funs = mod.__info__(:functions)
+    unless funs |> Enum.member?({:handle, 2}) and funs |> Enum.member?({:handle_event, 3}) do
       throw "Invalid module in elli_stack: #{mod} does not provide elli_handler behaviour"
     end
       
