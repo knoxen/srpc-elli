@@ -5,7 +5,7 @@ defmodule SrpcElli.Mixfile do
     [app: :srpc_elli,
      version: "0.5.0",
      description: "Secure Remote Password Cryptor Elli Middleware",
-     elixir: "~> 1.5",
+     elixir: "~> 1.6",
      start_permanent: Mix.env == :prod,
      deps: deps(),
     ] ++ project(Mix.env)
