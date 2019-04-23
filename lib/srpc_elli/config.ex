@@ -32,9 +32,9 @@ defmodule SrpcElli.Config do
   defp set_server_config(file) do
     file
     |> File.read!()
-    |> :srpc_lib.srpc_parse_config()
+    |> :srpc_lib.parse_srpc_config()
     |> case do
-      {:ok, %{:srpc_type => 0} = config} ->
+      {:ok, %{:type => 0} = config} ->
         Application.put_env(:srpc_srv, :server_config, config)
         :ok
 

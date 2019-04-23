@@ -11,55 +11,33 @@ defmodule SrpcElli.ElliHandler do
 
   ## ===============================================================================================
   ##
-  ##  Preprocess
+  ##  Preprocess Request
   ##
   ## ===============================================================================================
-  ## -----------------------------------------------------------------------------------------------
-  ##  Preprocess Request
-  ## -----------------------------------------------------------------------------------------------
   def preprocess(req, _args) do
     time_stamp(:srpc_start)
 
-    case Request.method(req) do
-      :POST ->
-        preprocess_post(req, Request.path(req))
+    case {Request.method(req), Request.path(req)} do
+      {:POST, []} ->
+        req
+        |> Request.body()
+        |> Srpc.parse_packet()
+        |> srpc_preprocess(req)
 
       _ ->
-        respond({:error, "Invalid path: Only SRPC POST accepted"})
+        respond({:error, "Invalid request: Only SRPC POST to / are processed"})
     end
   end
 
   ## ===============================================================================================
   ##
-  ##  Preprocess POST
-  ##
-  ## ===============================================================================================
-  ## -----------------------------------------------------------------------------------------------
-  ##  Preprocess POST to /
-  ## -----------------------------------------------------------------------------------------------
-  defp preprocess_post(req, []) do
-    req
-    |> Request.body()
-    |> Srpc.parse_packet()
-    |> preprocess_srpc(req)
-  end
-
-  ## -----------------------------------------------------------------------------------------------
-  ##  Punt any path other than /
-  ## -----------------------------------------------------------------------------------------------
-  defp preprocess_post(_req, _path) do
-    respond({:error, "Invalid request: Only SRPC POST to / accepted"})
-  end
-
-  ## ===============================================================================================
-  ##
-  ##  Preprocess SRPC packet
+  ##  SRPC Preprocessing
   ##
   ## ===============================================================================================
   ## -----------------------------------------------------------------------------------------------
   ##  Preprocess lib exchange
   ## -----------------------------------------------------------------------------------------------
-  defp preprocess_srpc({:lib_exchange, _data}, req) do
+  defp srpc_preprocess({:lib_exchange, _data}, req) do
     :erlang.put(:req_type, :lib_exchange)
     req
   end
@@ -67,20 +45,20 @@ defmodule SrpcElli.ElliHandler do
   ## -----------------------------------------------------------------------------------------------
   ##  Preprocess srpc action
   ## -----------------------------------------------------------------------------------------------
-  defp preprocess_srpc({:srpc_action, client_info, _data}, req) do
+  defp srpc_preprocess({:srpc_action, client_conn, _data}, req) do
     :erlang.put(:req_type, :srpc_action)
-    :erlang.put(:client_info, client_info)
+    :erlang.put(:client_conn, client_conn)
     req
   end
 
   ## -----------------------------------------------------------------------------------------------
   ##  Preprocess app request
   ## -----------------------------------------------------------------------------------------------
-  defp preprocess_srpc({:app_request, client_info, data}, req) do
+  defp srpc_preprocess({:app_request, client_conn, data}, req) do
     :erlang.put(:req_type, :app_request)
-    :erlang.put(:client_info, client_info)
+    :erlang.put(:client_conn, client_conn)
 
-    case Srpc.unwrap(client_info, data) do
+    case Srpc.unwrap(client_conn, data) do
       {:ok,
        {nonce,
         <<app_map_len::size(16), app_map_data::binary-size(app_map_len), app_body::binary>>}} ->
@@ -111,7 +89,7 @@ defmodule SrpcElli.ElliHandler do
   ## -----------------------------------------------------------------------------------------------
   ##  Preprocess invalid and error request
   ## -----------------------------------------------------------------------------------------------
-  defp preprocess_srpc(other, _req), do: respond(other)
+  defp srpc_preprocess(other, _req), do: respond(other)
 
   ## -----------------------------------------------------------------------------------------------
   ##   Build app request from app map
@@ -149,7 +127,12 @@ defmodule SrpcElli.ElliHandler do
   ##
   ## ===============================================================================================
   def handle({_code, _hdrs, _data} = resp, _args), do: resp
-  def handle(req, _args), do: :erlang.get(:req_type) |> handle_req(req)
+
+  def handle(req, _args) do
+    :req_type
+    |> :erlang.get()
+    |> handle_req(req)
+  end
 
   ## -----------------------------------------------------------------------------------------------
   ##  Handle lib exchange
@@ -177,12 +160,12 @@ defmodule SrpcElli.ElliHandler do
   ##  Handle srpc action
   ## -----------------------------------------------------------------------------------------------
   defp handle_req(:srpc_action, req) do
-    {:srpc_action, client_info, req_data} =
+    {:srpc_action, client_conn, req_data} =
       req
       |> Request.body()
       |> Srpc.parse_packet()
 
-    case Srpc.srpc_action(client_info, req_data) do
+    case Srpc.srpc_action(client_conn, req_data) do
       {_srpc_action, {:invalid, _} = invalid} ->
         respond(invalid)
 
@@ -239,7 +222,7 @@ defmodule SrpcElli.ElliHandler do
 
     packet = <<info_len::size(16), info_data::binary, data::binary>>
 
-    respond(Srpc.wrap(:erlang.get(:client_info), nonce, packet))
+    respond(Srpc.wrap(:erlang.get(:client_conn), nonce, packet))
   end
 
   ## ===============================================================================================
