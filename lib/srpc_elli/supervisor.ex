@@ -12,7 +12,7 @@ defmodule SrpcElli.Supervisor do
   end
 
   def init([]) do
-    case SrpcElli.Config.process() do
+    case SrpcElli.AppConfig.process() do
       {:ok, {port, stack}} ->
         start_elli(port, stack)
 

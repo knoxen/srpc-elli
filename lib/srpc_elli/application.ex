@@ -4,8 +4,7 @@ defmodule SrpcElli.Application do
   use Application
 
   def start(_type, _args) do
-    Process.register self(), SrpcElli.Application
+    Process.register(self(), SrpcElli.Application)
     SrpcElli.Supervisor.start_link()
   end
-
 end

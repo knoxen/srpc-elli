@@ -290,7 +290,7 @@ defmodule SrpcElli.ElliHandler do
   ##
   ## -----------------------------------------------------------------------------------------------
   defp time_stamp(marker) do
-    :erlang.put({:time, marker}, :erlang.monotonic_time(:micro_seconds))
+    :erlang.put({:time, marker}, :erlang.monotonic_time())
   end
 
   ## -----------------------------------------------------------------------------------------------

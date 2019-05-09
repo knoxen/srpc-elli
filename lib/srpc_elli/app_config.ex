@@ -1,35 +1,36 @@
-defmodule SrpcElli.Config do
+defmodule SrpcElli.AppConfig do
   @moduledoc false
 
   def process() do
-    case process_app_srpc_config() do
+    case app_srpc_config() do
       :ok ->
-        process_app_elli_config()
+        app_elli_config()
 
       error ->
         error
     end
   end
 
-  defp process_app_srpc_config() do
-    :srpc
-    |> app_config(:server_file)
+  defp app_srpc_config() do
+    srpc_config_file()
     |> case do
-      {:ok, server_file} ->
-        case set_server_config(server_file) do
-          :ok ->
-            set_srpc_handler()
+      {:ok, file} ->
+        file
+        |> process_config_file()
+        |> case do
+             :ok ->
+               set_srpc_handler()
 
-          error ->
-            error
-        end
+             error ->
+               error
+           end
 
-      error ->
-        error
-    end
+         error ->
+           error
+       end
   end
 
-  defp set_server_config(file) do
+  defp process_config_file(file) do
     file
     |> File.read!()
     |> :srpc_lib.parse_srpc_config()
@@ -39,7 +40,35 @@ defmodule SrpcElli.Config do
         :ok
 
       {:ok, %{:srpc_type => 1}} ->
-        {:error, "SrpcElli: SRPC configuration file is for client"}
+        {:error, "SrpcElli: SRPC configuration file is for client, not server"}
+
+      error ->
+        error
+    end
+  end
+
+  defp srpc_config_file() do
+    :srpc
+    |> app_config(:server_file)
+    |> case do
+      {:ok, file} ->
+        app_file(file)
+
+      error ->
+        error
+    end
+  end
+
+  defp app_file(file) do
+    :srpc
+    |> app_config(:app_name)
+    |> case do
+      {:ok, app_name} ->
+        {:ok,
+         app_name
+         |> Application.app_dir()
+         |> Kernel.<>("/")
+         |> Kernel.<>(file)}
 
       error ->
         error
@@ -59,7 +88,7 @@ defmodule SrpcElli.Config do
     end
   end
 
-  defp process_app_elli_config() do
+  defp app_elli_config() do
     case elli_stack() do
       {:ok, stack} ->
         :elli

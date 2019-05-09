@@ -1,4 +1,4 @@
 %{
-  "elli": {:git, "https://github.com/knoxen/elli.git", "46c68b6417db195f49e87b8aa6cc655e31b525bf", [branch: "knoxen"]},
+  "elli": {:git, "https://github.com/knoxen/elli.git", "cec441e6388ab390c66d6a90d2c57c1af978f1bd", [branch: "develop"]},
   "poison": {:hex, :poison, "4.0.1", "bcb755a16fac91cad79bfe9fc3585bb07b9331e50cfe3420a24bcc2d735709ae", [:mix], [], "hexpm"},
 }

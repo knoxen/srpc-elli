@@ -21,8 +21,8 @@ defmodule SrpcElli.Mixfile do
   defp deps,
     do:
       [
-        {:poison, "~> 4.0.1"},
-        {:elli, git: "https://github.com/knoxen/elli.git", branch: "knoxen"}
+        {:poison, "~> 4.0"},
+        {:elli, git: "https://github.com/knoxen/elli.git", branch: "develop"}
       ] ++
         deps(Mix.env())
 
